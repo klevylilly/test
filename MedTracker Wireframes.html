@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MedTracker — 6 Wireframe Concepts</title>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<template id="__bundler_thumbnail" data-bg-color="#f2f0eb">
+  <svg viewBox="0 0 120 80" xmlns="http://www.w3.org/2000/svg">
+    <rect width="120" height="80" fill="#f2f0eb"/>
+    <rect x="10" y="10" width="28" height="60" rx="5" fill="#fff" stroke="#1a1a1a" stroke-width="1.5"/>
+    <rect x="46" y="10" width="28" height="60" rx="5" fill="#fff" stroke="#1a1a1a" stroke-width="1.5"/>
+    <rect x="82" y="10" width="28" height="60" rx="5" fill="#fff" stroke="#1a1a1a" stroke-width="1.5"/>
+    <rect x="15" y="22" width="18" height="6" rx="3" fill="#4a90d9"/>
+    <rect x="51" y="22" width="18" height="6" rx="3" fill="#5bba87"/>
+    <rect x="87" y="22" width="18" height="6" rx="3" fill="#e07b54"/>
+  </svg>
+</template>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #f2f0eb; overflow: hidden; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+// ── Design Canvas ─────────────────────────────────────────────
+const DC = {
+  bg: '#f0eee9', grid: 'rgba(0,0,0,0.06)',
+  label: 'rgba(60,50,40,0.7)', title: 'rgba(40,30,20,0.85)',
+  subtitle: 'rgba(60,50,40,0.6)',
+  font: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
+};
+
+function DesignCanvas({ children, minScale=0.1, maxScale=8, style={} }) {
+  const vpRef = React.useRef(null);
+  const worldRef = React.useRef(null);
+  const tf = React.useRef({ x:0, y:0, scale:1 });
+  const apply = React.useCallback(() => {
+    const { x, y, scale } = tf.current;
+    const el = worldRef.current;
+    if (el) el.style.transform = `translate3d(${x}px,${y}px,0) scale(${scale})`;
+  }, []);
+  React.useEffect(() => {
+    const vp = vpRef.current; if (!vp) return;
+    const zoomAt = (cx,cy,factor) => {
+      const r = vp.getBoundingClientRect();
+      const px=cx-r.left, py=cy-r.top, t=tf.current;
+      const next = Math.min(maxScale, Math.max(minScale, t.scale*factor));
+      const k = next/t.scale;
+      t.x=px-(px-t.x)*k; t.y=py-(py-t.y)*k; t.scale=next; apply();
+    };
+    const isMW = e => e.deltaMode!==0||(e.deltaX===0&&Number.isInteger(e.deltaY)&&Math.abs(e.deltaY)>=40);
+    let isG=false, gsBase=1;
+    const onWheel = e => {
+      e.preventDefault(); if(isG) return;
+      if(e.ctrlKey) zoomAt(e.clientX,e.clientY,Math.exp(-e.deltaY*0.01));
+      else if(isMW(e)) zoomAt(e.clientX,e.clientY,Math.exp(-Math.sign(e.deltaY)*0.18));
+      else { tf.current.x-=e.deltaX; tf.current.y-=e.deltaY; apply(); }
+    };
+    const onGS = e => { e.preventDefault(); isG=true; gsBase=tf.current.scale; };
+    const onGC = e => { e.preventDefault(); zoomAt(e.clientX,e.clientY,(gsBase*e.scale)/tf.current.scale); };
+    const onGE = e => { e.preventDefault(); isG=false; };
+    let drag=null;
+    const onPD = e => {
+      const onBg=e.target===vp||e.target===worldRef.current;
+      if(!(e.button===1||(e.button===0&&onBg))) return;
+      e.preventDefault(); vp.setPointerCapture(e.pointerId);
+      drag={id:e.pointerId,lx:e.clientX,ly:e.clientY}; vp.style.cursor='grabbing';
+    };
+    const onPM = e => {
+      if(!drag||e.pointerId!==drag.id) return;
+      tf.current.x+=e.clientX-drag.lx; tf.current.y+=e.clientY-drag.ly;
+      drag.lx=e.clientX; drag.ly=e.clientY; apply();
+    };
+    const onPU = e => {
+      if(!drag||e.pointerId!==drag.id) return;
+      vp.releasePointerCapture(e.pointerId); drag=null; vp.style.cursor='';
+    };
+    vp.addEventListener('wheel',onWheel,{passive:false});
+    vp.addEventListener('gesturestart',onGS,{passive:false});
+    vp.addEventListener('gesturechange',onGC,{passive:false});
+    vp.addEventListener('gestureend',onGE,{passive:false});
+    vp.addEventListener('pointerdown',onPD);
+    vp.addEventListener('pointermove',onPM);
+    vp.addEventListener('pointerup',onPU);
+    vp.addEventListener('pointercancel',onPU);
+    return () => {
+      vp.removeEventListener('wheel',onWheel);
+      vp.removeEventListener('gesturestart',onGS);
+      vp.removeEventListener('gesturechange',onGC);
+      vp.removeEventListener('gestureend',onGE);
+      vp.removeEventListener('pointerdown',onPD);
+      vp.removeEventListener('pointermove',onPM);
+      vp.removeEventListener('pointerup',onPU);
+      vp.removeEventListener('pointercancel',onPU);
+    };
+  }, [apply,minScale,maxScale]);
+  const gridSvg = `url("data:image/svg+xml,%3Csvg width='120' height='120' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M120 0H0v120' fill='none' stroke='${encodeURIComponent(DC.grid)}' stroke-width='1'/%3E%3C/svg%3E")`;
+  return (
+    <div ref={vpRef} style={{ height:'100vh',width:'100vw',background:DC.bg,overflow:'hidden',overscrollBehavior:'none',touchAction:'none',position:'relative',fontFamily:DC.font,boxSizing:'border-box',...style }}>
+      <div ref={worldRef} style={{ position:'absolute',top:0,left:0,transformOrigin:'0 0',willChange:'transform',width:'max-content',minWidth:'100%',minHeight:'100%',padding:'60px 0 80px',backgroundImage:gridSvg,backgroundSize:'120px 120px' }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function DCSection({ title, subtitle, children, gap=48 }) {
+  return (
+    <div style={{ marginBottom:80 }}>
+      <div style={{ padding:'0 60px 36px' }}>
+        <div style={{ fontSize:22,fontWeight:600,color:DC.title,letterSpacing:-0.3,marginBottom:4 }}>{title}</div>
+        {subtitle && <div style={{ fontSize:14,color:DC.subtitle }}>{subtitle}</div>}
+      </div>
+      <div style={{ display:'flex',gap,padding:'0 60px',alignItems:'flex-start',width:'max-content' }}>{children}</div>
+    </div>
+  );
+}
+
+// ── Sketch primitives ─────────────────────────────────────────
+const S = {
+  hand: "'Caveat', cursive",
+  ink: '#1a1a1a', faint: '#bbb',
+  accent1: '#4a90d9', accent2: '#e07b54', accent3: '#5bba87',
+};
+
+const Label = ({children, size=12, color='#555', bold, style={}}) => (
+  <div style={{fontFamily:S.hand,fontSize:size,color,fontWeight:bold?700:400,lineHeight:1.2,...style}}>{children}</div>
+);
+
+const PhoneShell = ({children, label, width=260, height=520}) => (
+  <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
+    {label && <Label size={13} bold color="#444">{label}</Label>}
+    <div style={{ width,height,border:'3px solid #1a1a1a',borderRadius:28,background:'#fff',overflow:'hidden',position:'relative',display:'flex',flexDirection:'column',boxShadow:'3px 4px 0 #1a1a1a' }}>
+      <div style={{ height:24,background:'#f5f5f5',borderBottom:'1.5px solid #ddd',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 14px',flexShrink:0 }}>
+        <Label size={10} color="#666">9:41</Label>
+        <div style={{width:40,height:8,background:'#ccc',borderRadius:10}}/>
+        <Label size={10} color="#666">●●●</Label>
+      </div>
+      <div style={{flex:1,overflow:'hidden',position:'relative'}}>{children}</div>
+    </div>
+  </div>
+);
+
+const SketchBtn = ({children, color='#1a1a1a', bg='#fff', size=12, px=10, py=5, onClick, style={}}) => (
+  <div onClick={onClick} style={{ display:'inline-flex',alignItems:'center',justifyContent:'center',border:`2px solid ${color}`,borderRadius:6,background:bg,padding:`${py}px ${px}px`,fontFamily:S.hand,fontSize:size,color,fontWeight:600,boxShadow:'2px 2px 0 #1a1a1a',cursor:onClick?'pointer':'default',...style }}>
+    {children}
+  </div>
+);
+
+const SketchCheck = ({done, size=22}) => (
+  <div style={{ width:size,height:size,border:`2px solid ${done?S.accent3:'#aaa'}`,borderRadius:4,background:done?S.accent3:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+    {done && <span style={{color:'#fff',fontSize:size*0.65,fontFamily:S.hand,lineHeight:1}}>✓</span>}
+  </div>
+);
+
+const Pill = ({color='#4a90d9', w=28, h=14}) => (
+  <div style={{width:w,height:h,background:color,borderRadius:h,border:'1.5px solid rgba(0,0,0,0.15)',flexShrink:0}}/>
+);
+
+// ─────────────────────────────────────────────────────────────
+// CONCEPT 1: BIG TAP
+// ─────────────────────────────────────────────────────────────
+function Concept1() {
+  const [taken, setTaken] = React.useState({0:true,1:false,2:false});
+  const meds = [
+    {name:'Metformin 500mg',time:'8:00 AM',color:'#4a90d9'},
+    {name:'Lisinopril 10mg',time:'8:00 AM',color:'#9b6dd9'},
+    {name:'Atorvastatin',time:'9:00 PM',color:'#e07b54'},
+  ];
+  return (
+    <PhoneShell label="① Big Tap">
+      <div style={{padding:'10px 12px',display:'flex',flexDirection:'column',gap:8,height:'100%',overflowY:'auto'}}>
+        <Label size={16} bold>Today · Mon Apr 20</Label>
+        <Label size={11} color="#888">Tap a card to mark taken</Label>
+        {meds.map((m,i) => (
+          <div key={i} onClick={()=>setTaken(t=>({...t,[i]:!t[i]}))}
+            style={{ border:`2.5px solid ${taken[i]?m.color:'#1a1a1a'}`,borderRadius:10,background:taken[i]?m.color+'22':'#fff',padding:'12px 14px',display:'flex',alignItems:'center',gap:10,cursor:'pointer',boxShadow:taken[i]?'none':'2px 3px 0 #1a1a1a' }}>
+            <Pill color={taken[i]?m.color:'#ccc'} w={32} h={16}/>
+            <div style={{flex:1}}>
+              <Label size={14} bold color={taken[i]?m.color:'#1a1a1a'}>{m.name}</Label>
+              <Label size={11} color="#888">{m.time}</Label>
+            </div>
+            <SketchCheck done={taken[i]} size={26}/>
+          </div>
+        ))}
+        <div style={{marginTop:'auto',paddingTop:6}}>
+          <div style={{background:'#f5f5f5',border:'1.5px solid #ddd',borderRadius:8,padding:'8px 12px',display:'flex',justifyContent:'space-between'}}>
+            <Label size={12} color="#555">Today's streak</Label>
+            <Label size={12} bold color={S.accent3}>🔥 14 days</Label>
+          </div>
+        </div>
+      </div>
+    </PhoneShell>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// CONCEPT 2: TIMELINE
+// ─────────────────────────────────────────────────────────────
+function Concept2() {
+  const [taken, setTaken] = React.useState({0:true,1:true,2:false,3:false});
+  const slots = [
+    {time:'8:00 AM',meds:[{n:'Metformin 500mg',c:'#4a90d9'},{n:'Vitamin D',c:'#f5c842'}],ids:[0,1]},
+    {time:'12:00 PM',meds:[{n:'Metformin 500mg',c:'#4a90d9'}],ids:[2]},
+    {time:'9:00 PM',meds:[{n:'Atorvastatin',c:'#e07b54'},{n:'Lisinopril',c:'#9b6dd9'}],ids:[3]},
+  ];
+  return (
+    <PhoneShell label="② Timeline">
+      <div style={{padding:'10px 12px',height:'100%',display:'flex',flexDirection:'column',gap:6}}>
+        <Label size={15} bold>Monday, Apr 20</Label>
+        <div style={{flex:1,overflowY:'auto',position:'relative',paddingLeft:52}}>
+          <div style={{position:'absolute',left:24,top:4,bottom:4,width:2,background:'#e0e0e0',borderRadius:1}}/>
+          {slots.map((slot,si) => (
+            <div key={si} style={{position:'relative',marginBottom:16}}>
+              <div style={{position:'absolute',left:-52,width:44,textAlign:'right',fontFamily:S.hand,fontSize:10,color:'#888',top:4}}>{slot.time}</div>
+              <div style={{position:'absolute',left:-30,top:7,width:8,height:8,borderRadius:'50%',background:slot.ids.every(id=>taken[id])?S.accent3:'#ccc',border:'2px solid #fff',zIndex:1}}/>
+              <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                {slot.meds.map((m,mi) => {
+                  const id=slot.ids[mi];
+                  return (
+                    <div key={mi} onClick={()=>setTaken(t=>({...t,[id]:!t[id]}))}
+                      style={{border:`2px solid ${taken[id]?m.c:'#ddd'}`,borderRadius:8,padding:'7px 10px',background:taken[id]?m.c+'18':'#fff',display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+                      <Pill color={m.c} w={22} h={11}/>
+                      <Label size={12} bold color={taken[id]?m.c:'#333'}>{m.n}</Label>
+                      <div style={{marginLeft:'auto'}}><SketchCheck done={taken[id]} size={18}/></div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{display:'flex',borderTop:'1.5px solid #eee',paddingTop:8,justifyContent:'space-around'}}>
+          {['Today','History','Schedule','Settings'].map(t=>(
+            <Label key={t} size={10} color={t==='Today'?S.accent1:'#aaa'} bold={t==='Today'}>{t}</Label>
+          ))}
+        </div>
+      </div>
+    </PhoneShell>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// CONCEPT 3: SWIPE TO LOG
+// ─────────────────────────────────────────────────────────────
+function Concept3() {
+  const [idx, setIdx] = React.useState(0);
+  const [log, setLog] = React.useState([]);
+  const meds = [
+    {name:'Metformin 500mg',dose:'1 tablet',time:'8:00 AM',color:'#4a90d9'},
+    {name:'Lisinopril 10mg',dose:'1 tablet',time:'8:00 AM',color:'#9b6dd9'},
+    {name:'Vitamin D 2000IU',dose:'2 capsules',time:'8:00 AM',color:'#f5c842'},
+  ];
+  const done = idx >= meds.length;
+  return (
+    <PhoneShell label="③ Swipe to Log">
+      <div style={{padding:'10px 12px',height:'100%',display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
+        <Label size={15} bold>Morning Check-in</Label>
+        <Label size={11} color="#888">8:00 AM · {meds.length-idx} remaining</Label>
+        <div style={{flex:1,width:'100%',position:'relative',display:'flex',alignItems:'center',justifyContent:'center'}}>
+          {!done ? (
+            <>
+              {idx+1<meds.length && (
+                <div style={{position:'absolute',width:'85%',border:'2.5px solid #1a1a1a',borderRadius:12,background:'#f5f5f5',height:170,top:20,transform:'rotate(3deg)',boxShadow:'2px 3px 0 #1a1a1a'}}/>
+              )}
+              <div style={{position:'relative',width:'90%',border:'2.5px solid #1a1a1a',borderRadius:12,background:'#fff',padding:'20px 16px',boxShadow:'3px 4px 0 #1a1a1a',display:'flex',flexDirection:'column',alignItems:'center',gap:10,zIndex:2}}>
+                <Pill color={meds[idx].color} w={60} h={28}/>
+                <Label size={18} bold style={{textAlign:'center'}}>{meds[idx].name}</Label>
+                <Label size={13} color="#666">{meds[idx].dose}</Label>
+                <Label size={11} color="#aaa">{meds[idx].time}</Label>
+              </div>
+            </>
+          ) : (
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
+              <div style={{fontSize:36}}>✅</div>
+              <Label size={15} bold color={S.accent3}>All done!</Label>
+              <Label size={12} color="#888" style={{textAlign:'center'}}>Next dose at 9:00 PM</Label>
+            </div>
+          )}
+        </div>
+        {!done && (
+          <div style={{display:'flex',gap:20,paddingBottom:8}}>
+            <SketchBtn color="#e07b54" bg="#fff5f2" px={20} py={10} size={13}
+              onClick={()=>{setLog([...log,'skip']);setIdx(i=>i+1);}}>✕ Skip</SketchBtn>
+            <SketchBtn color={S.accent3} bg="#f0fbf5" px={20} py={10} size={13}
+              onClick={()=>{setLog([...log,'taken']);setIdx(i=>i+1);}}>✓ Taken</SketchBtn>
+          </div>
+        )}
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'center'}}>
+          {log.map((l,i)=>(
+            <div key={i} style={{width:22,height:22,borderRadius:'50%',background:l==='taken'?S.accent3+'33':'#fce8e2',border:`2px solid ${l==='taken'?S.accent3:'#e07b54'}`,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <Label size={11} color={l==='taken'?S.accent3:'#e07b54'}>{l==='taken'?'✓':'✕'}</Label>
+            </div>
+          ))}
+        </div>
+      </div>
+    </PhoneShell>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// CONCEPT 4: CLOCK WHEEL
+// ─────────────────────────────────────────────────────────────
+function Concept4() {
+  const [sel, setSel] = React.useState(null);
+  const doses = [
+    {hour:8,min:0,label:'Metformin + Lisinopril',color:'#4a90d9',done:true},
+    {hour:13,min:0,label:'Metformin',color:'#4a90d9',done:false},
+    {hour:21,min:0,label:'Atorvastatin',color:'#e07b54',done:false},
+  ];
+  const R=78,cx=112,cy=112;
+  const toXY=(h,m)=>{
+    const angle=((h+m/60)/12)*Math.PI*2-Math.PI/2;
+    return {x:cx+R*Math.cos(angle),y:cy+R*Math.sin(angle)};
+  };
+  const now={x:cx+(R-12)*Math.cos(((8.7)/12)*Math.PI*2-Math.PI/2),y:cy+(R-12)*Math.sin(((8.7)/12)*Math.PI*2-Math.PI/2)};
+  return (
+    <PhoneShell label="④ Clock Wheel">
+      <div style={{padding:'10px 12px',height:'100%',display:'flex',flexDirection:'column',gap:6}}>
+        <Label size={15} bold>Today's Schedule</Label>
+        <div style={{display:'flex',justifyContent:'center'}}>
+          <svg width={224} height={224}>
+            <circle cx={cx} cy={cy} r={R+14} fill="#f8f8f8" stroke="#e0e0e0" strokeWidth={1.5}/>
+            <circle cx={cx} cy={cy} r={R} fill="none" stroke="#e8e8e8" strokeWidth={18} strokeDasharray="2 4"/>
+            {Array.from({length:12},(_,i)=>{
+              const a=(i/12)*Math.PI*2-Math.PI/2;
+              return <line key={i} x1={cx+(R+6)*Math.cos(a)} y1={cy+(R+6)*Math.sin(a)} x2={cx+(R+14)*Math.cos(a)} y2={cy+(R+14)*Math.sin(a)} stroke="#ccc" strokeWidth={1}/>;
+            })}
+            {doses.map((d,i)=>{
+              const {x,y}=toXY(d.hour%12||12,d.min);
+              return (
+                <g key={i} onClick={()=>setSel(sel===i?null:i)} style={{cursor:'pointer'}}>
+                  <circle cx={x} cy={y} r={14} fill={d.done?d.color:'#fff'} stroke={d.color} strokeWidth={2.5}/>
+                  {d.done&&<text x={x} y={y+4} textAnchor="middle" fill="#fff" fontSize={12} fontFamily={S.hand}>✓</text>}
+                  {!d.done&&<text x={x} y={y+5} textAnchor="middle" fill={d.color} fontSize={14} fontFamily={S.hand} fontWeight="bold">!</text>}
+                </g>
+              );
+            })}
+            <line x1={cx} y1={cy} x2={now.x} y2={now.y} stroke="#ff4444" strokeWidth={2.5} strokeLinecap="round"/>
+            <circle cx={cx} cy={cy} r={4} fill="#ff4444"/>
+            <text x={cx} y={cy-8} textAnchor="middle" fill="#333" fontSize={13} fontFamily={S.hand} fontWeight="bold">9:41</text>
+            <text x={cx} y={cy+8} textAnchor="middle" fill="#999" fontSize={10} fontFamily={S.hand}>AM</text>
+          </svg>
+        </div>
+        <div style={{border:'2px solid #1a1a1a',borderRadius:8,padding:'10px 12px',minHeight:60}}>
+          {sel!==null ? (
+            <>
+              <Label size={13} bold color={doses[sel].color}>{doses[sel].label}</Label>
+              <Label size={11} color="#888">{doses[sel].hour}:{String(doses[sel].min).padStart(2,'0')} {doses[sel].hour<12?'AM':'PM'}</Label>
+              <div style={{marginTop:8}}>
+                <SketchBtn color={doses[sel].done?'#aaa':S.accent3} bg="#f0fbf5" size={12} px={14} py={5}>
+                  {doses[sel].done?'✓ Taken':'Mark taken'}
+                </SketchBtn>
+              </div>
+            </>
+          ) : (
+            <Label size={12} color="#aaa">Tap a dose to see details</Label>
+          )}
+        </div>
+      </div>
+    </PhoneShell>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// CONCEPT 5: HABIT GRID
+// ─────────────────────────────────────────────────────────────
+function Concept5() {
+  const [todayDone, setTodayDone] = React.useState(false);
+  const seed = [1,0,1,1,0,1,1,1,0,1,1,0,0,1,1,1,0,1,1];
+  const days = Array.from({length:30},(_,i)=>{
+    if(i>=20) return 'future';
+    if(i===19) return todayDone?'full':'today';
+    return seed[i%seed.length]>0.5?'full':i%5===0?'miss':'partial';
+  });
+  const colorMap = {full:S.accent3,partial:'#f5c842',miss:'#e07b54',future:'#f0f0f0',today:'#fff'};
+  const meds = ['Metformin','Lisinopril','Atorvastatin'];
+  return (
+    <PhoneShell label="⑤ Habit Grid">
+      <div style={{padding:'10px 12px',height:'100%',display:'flex',flexDirection:'column',gap:8}}>
+        <Label size={15} bold>April 2026</Label>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:3}}>
+          {['S','M','T','W','Th','F','Sa'].map((d,i)=>(
+            <Label key={i} size={9} color="#aaa" style={{textAlign:'center'}}>{d}</Label>
+          ))}
+          {Array.from({length:2}).map((_,i)=><div key={'e'+i}/>)}
+          {days.map((d,i)=>(
+            <div key={i} onClick={d==='today'?()=>setTodayDone(x=>!x):undefined}
+              style={{aspectRatio:'1',borderRadius:4,background:d==='today'?'#fff':colorMap[d],border:d==='today'?`2.5px solid ${todayDone?S.accent3:S.accent1}`:'1.5px solid transparent',cursor:d==='today'?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:d==='today'?'1px 1px 0 #1a1a1a':'none'}}>
+              {d==='today'&&<Label size={9} bold color={S.accent1}>{i+2}</Label>}
+            </div>
+          ))}
+        </div>
+        <div style={{display:'flex',gap:10,alignItems:'center'}}>
+          {[['full','All taken'],['partial','Some'],['miss','Missed']].map(([k,l])=>(
+            <div key={k} style={{display:'flex',alignItems:'center',gap:4}}>
+              <div style={{width:10,height:10,borderRadius:2,background:colorMap[k]}}/>
+              <Label size={10} color="#777">{l}</Label>
+            </div>
+          ))}
+        </div>
+        <div style={{borderTop:'1.5px solid #eee',paddingTop:8}}>
+          <Label size={12} bold style={{marginBottom:6}}>Today — tap to log</Label>
+          {meds.map((m,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:'1px dashed #eee'}}>
+              <SketchCheck done={todayDone} size={16}/>
+              <Label size={12} color="#333">{m}</Label>
+            </div>
+          ))}
+        </div>
+        <div style={{marginTop:'auto'}}>
+          <div style={{background:'#f8fff9',border:'1.5px solid '+S.accent3,borderRadius:8,padding:'6px 10px'}}>
+            <Label size={11} color={S.accent3} bold>87% adherence this month 📈</Label>
+          </div>
+        </div>
+      </div>
+    </PhoneShell>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// CONCEPT 6: SCHEDULE BUILDER
+// ─────────────────────────────────────────────────────────────
+function Concept6() {
+  const [tab, setTab] = React.useState('today');
+  return (
+    <PhoneShell label="⑥ Schedule Builder">
+      <div style={{height:'100%',display:'flex',flexDirection:'column'}}>
+        <div style={{display:'flex',borderBottom:'1.5px solid #eee'}}>
+          {['today','schedule'].map(t=>(
+            <div key={t} onClick={()=>setTab(t)}
+              style={{flex:1,padding:'8px 0',textAlign:'center',borderBottom:tab===t?`2.5px solid ${S.accent1}`:'2.5px solid transparent',cursor:'pointer'}}>
+              <Label size={12} bold={tab===t} color={tab===t?S.accent1:'#aaa'}>{t==='today'?'Today':'My Schedule'}</Label>
+            </div>
+          ))}
+        </div>
+        {tab==='today' ? (
+          <div style={{flex:1,overflowY:'auto',padding:'10px 12px',display:'flex',flexDirection:'column',gap:6}}>
+            <Label size={13} bold>Good morning · 3 doses due</Label>
+            {[
+              {name:'Metformin 500mg',note:'With breakfast',color:'#4a90d9',done:true},
+              {name:'Prednisone 20mg',note:'Day 3 of taper',color:'#e07b54',done:false},
+              {name:'Amoxicillin 500mg',note:'Day 4/10 · Every 8hrs',color:'#9b6dd9',done:false},
+            ].map((m,i)=>(
+              <div key={i} style={{border:`2px solid ${m.done?m.color:'#ddd'}`,borderRadius:8,padding:'8px 10px',background:m.done?m.color+'15':'#fff',display:'flex',gap:8,alignItems:'center'}}>
+                <Pill color={m.color} w={24} h={13}/>
+                <div style={{flex:1}}>
+                  <Label size={13} bold color={m.done?m.color:'#1a1a1a'}>{m.name}</Label>
+                  <Label size={10} color="#888">{m.note}</Label>
+                </div>
+                <SketchCheck done={m.done} size={22}/>
+              </div>
+            ))}
+            <div style={{background:'#fffbf0',border:'1.5px solid #f5c842',borderRadius:8,padding:'7px 10px',marginTop:4}}>
+              <Label size={11} bold color="#b8860b">⏰ Next: Amoxicillin in 3h 20m</Label>
+            </div>
+          </div>
+        ) : (
+          <div style={{flex:1,overflowY:'auto',padding:'10px 12px',display:'flex',flexDirection:'column',gap:8}}>
+            <Label size={12} color="#888">Custom rules per medication</Label>
+            {[
+              {name:'Metformin',rules:['2×/day with meals','8 AM + 6 PM'],color:'#4a90d9'},
+              {name:'Prednisone',rules:['Taper: 3→2→1 weekly','Mon–Sun'],color:'#e07b54'},
+              {name:'Antibiotic',rules:['Every 8 hrs','For 10 days'],color:'#9b6dd9'},
+            ].map((m,i)=>(
+              <div key={i} style={{border:'2px solid #1a1a1a',borderRadius:8,padding:'8px 10px'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                  <Pill color={m.color} w={22} h={11}/>
+                  <Label size={13} bold color={m.color}>{m.name}</Label>
+                  <Label size={10} color="#aaa" style={{marginLeft:'auto',border:'1px solid #ddd',borderRadius:4,padding:'1px 5px'}}>Edit</Label>
+                </div>
+                {m.rules.map((r,ri)=>(
+                  <Label key={ri} size={11} color="#666" style={{paddingLeft:30}}>· {r}</Label>
+                ))}
+              </div>
+            ))}
+            <SketchBtn color={S.accent1} bg="#f0f7ff" size={12} px={14} py={7}>+ Add medication</SketchBtn>
+            <div style={{border:'2px dashed #ccc',borderRadius:8,padding:'10px 12px',background:'#fafafa'}}>
+              <Label size={11} bold color="#888" style={{marginBottom:6}}>Schedule type</Label>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                {['Daily','Specific days','Every N hours','Taper','As needed'].map((t,i)=>(
+                  <div key={i} style={{border:'1.5px solid #ccc',borderRadius:20,padding:'3px 8px',background:t==='Every N hours'?'#e8f0fe':'transparent'}}>
+                    <Label size={10} color={t==='Every N hours'?S.accent1:'#888'}>{t}</Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </PhoneShell>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// APP
+// ─────────────────────────────────────────────────────────────
+function App() {
+  return (
+    <DesignCanvas>
+      <DCSection
+        title="6 Concepts — Medication Tracker"
+        subtitle="Wireframes exploring different interaction models. Click interactive elements to try the flows."
+      >
+        <ColCard><Concept1/><Note>Simple card list. Tap = toggle.</Note></ColCard>
+        <ColCard><Concept2/><Note>Time axis. Great for complex schedules.</Note></ColCard>
+        <ColCard><Concept3/><Note>One med at a time. Fast morning check-in.</Note></ColCard>
+        <ColCard><Concept4/><Note>Clock face. Spatial sense of time until next dose.</Note></ColCard>
+        <ColCard><Concept5/><Note>Calendar grid. Motivating streak view.</Note></ColCard>
+        <ColCard><Concept6/><Note>Rich schedule builder. Two tabs: Today + My Schedule.</Note></ColCard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+const ColCard = ({children}) => <div style={{display:'flex',flexDirection:'column',gap:8}}>{children}</div>;
+const Note = ({children}) => <div style={{fontFamily:"'Caveat',cursive",fontSize:12,color:'#888',paddingLeft:8}}>{children}</div>;
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
