@@ -1,7 +1,21 @@
-
-// DesignCanvas.jsx — Figma-ish design canvas wrapper
-// Warm gray grid bg + Sections + Artboards + PostIt notes.
-// No assets, no deps.
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Design Canvas</title>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { overflow: hidden; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useRef, useEffect, useCallback } = React;
 
 const DC = {
   bg: '#f0eee9',
@@ -14,31 +28,18 @@ const DC = {
   font: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
 };
 
-// ─────────────────────────────────────────────────────────────
-// Main canvas — transform-based pan/zoom viewport
-//
-// Input mapping (Figma-style):
-//   • trackpad pinch  → zoom   (ctrlKey wheel; Safari gesture* events)
-//   • trackpad scroll → pan    (two-finger)
-//   • mouse wheel     → zoom   (notched; distinguished from trackpad scroll)
-//   • middle-drag / primary-drag-on-bg → pan
-//
-// Transform state lives in a ref and is written straight to the DOM
-// (translate3d + will-change) so wheel ticks don't go through React —
-// keeps pans at 60fps on dense canvases.
-// ─────────────────────────────────────────────────────────────
 function DesignCanvas({ children, minScale = 0.1, maxScale = 8, style = {} }) {
-  const vpRef = React.useRef(null);
-  const worldRef = React.useRef(null);
-  const tf = React.useRef({ x: 0, y: 0, scale: 1 });
+  const vpRef = useRef(null);
+  const worldRef = useRef(null);
+  const tf = useRef({ x: 0, y: 0, scale: 1 });
 
-  const apply = React.useCallback(() => {
+  const apply = useCallback(() => {
     const { x, y, scale } = tf.current;
     const el = worldRef.current;
     if (el) el.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${scale})`;
   }, []);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const vp = vpRef.current;
     if (!vp) return;
 
@@ -48,46 +49,32 @@ function DesignCanvas({ children, minScale = 0.1, maxScale = 8, style = {} }) {
       const t = tf.current;
       const next = Math.min(maxScale, Math.max(minScale, t.scale * factor));
       const k = next / t.scale;
-      // keep the world point under the cursor fixed
       t.x = px - (px - t.x) * k;
       t.y = py - (py - t.y) * k;
       t.scale = next;
       apply();
     };
 
-    // Mouse-wheel vs trackpad-scroll heuristic. A physical wheel sends
-    // line-mode deltas (Firefox) or large integer pixel deltas with no X
-    // component (Chrome/Safari, typically multiples of 100/120). Trackpad
-    // two-finger scroll sends small/fractional pixel deltas, often with
-    // non-zero deltaX. ctrlKey is set by the browser for trackpad pinch.
     const isMouseWheel = (e) =>
       e.deltaMode !== 0 ||
       (e.deltaX === 0 && Number.isInteger(e.deltaY) && Math.abs(e.deltaY) >= 40);
 
+    let isGesturing = false;
     const onWheel = (e) => {
       e.preventDefault();
-      if (isGesturing) return; // Safari: gesture* owns the pinch — discard concurrent wheels
+      if (isGesturing) return;
       if (e.ctrlKey) {
-        // trackpad pinch (or explicit ctrl+wheel)
         zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.01));
       } else if (isMouseWheel(e)) {
-        // notched mouse wheel — fixed-ratio step per click
         zoomAt(e.clientX, e.clientY, Math.exp(-Math.sign(e.deltaY) * 0.18));
       } else {
-        // trackpad two-finger scroll — pan
         tf.current.x -= e.deltaX;
         tf.current.y -= e.deltaY;
         apply();
       }
     };
 
-    // Safari sends native gesture* events for trackpad pinch with a smooth
-    // e.scale; preferring these over the ctrl+wheel fallback gives a much
-    // better feel there. No-ops on other browsers. Safari also fires
-    // ctrlKey wheel events during the same pinch — isGesturing makes
-    // onWheel drop those entirely so they neither zoom nor pan.
     let gsBase = 1;
-    let isGesturing = false;
     const onGestureStart = (e) => { e.preventDefault(); isGesturing = true; gsBase = tf.current.scale; };
     const onGestureChange = (e) => {
       e.preventDefault();
@@ -95,8 +82,6 @@ function DesignCanvas({ children, minScale = 0.1, maxScale = 8, style = {} }) {
     };
     const onGestureEnd = (e) => { e.preventDefault(); isGesturing = false; };
 
-    // Drag-pan: middle button anywhere, or primary button starting on the
-    // canvas background (not inside an artboard).
     let drag = null;
     const onPointerDown = (e) => {
       const onBg = e.target === vp || e.target === worldRef.current;
@@ -141,10 +126,10 @@ function DesignCanvas({ children, minScale = 0.1, maxScale = 8, style = {} }) {
   }, [apply, minScale, maxScale]);
 
   const gridSvg = `url("data:image/svg+xml,%3Csvg width='120' height='120' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M120 0H0v120' fill='none' stroke='${encodeURIComponent(DC.grid)}' stroke-width='1'/%3E%3C/svg%3E")`;
+
   return (
     <div
       ref={vpRef}
-      className="design-canvas"
       style={{
         height: '100vh', width: '100vw',
         background: DC.bg,
@@ -176,9 +161,6 @@ function DesignCanvas({ children, minScale = 0.1, maxScale = 8, style = {} }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// Section — title + subtitle + h-stack of artboards (no wrap)
-// ─────────────────────────────────────────────────────────────
 function DCSection({ title, subtitle, children, gap = 48 }) {
   return (
     <div style={{ marginBottom: 80, position: 'relative' }}>
@@ -188,12 +170,9 @@ function DCSection({ title, subtitle, children, gap = 48 }) {
           letterSpacing: -0.3, marginBottom: 4,
         }}>{title}</div>
         {subtitle && (
-          <div style={{
-            fontSize: 14, fontWeight: 400, color: DC.subtitle,
-          }}>{subtitle}</div>
+          <div style={{ fontSize: 14, fontWeight: 400, color: DC.subtitle }}>{subtitle}</div>
         )}
       </div>
-      {/* h-stack — clips offscreen, never wraps */}
       <div style={{
         display: 'flex', gap, padding: '0 60px',
         alignItems: 'flex-start', width: 'max-content',
@@ -204,9 +183,6 @@ function DCSection({ title, subtitle, children, gap = 48 }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// Artboard — labeled card
-// ─────────────────────────────────────────────────────────────
 function DCArtboard({ label, children, width, height, style = {} }) {
   return (
     <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -232,9 +208,6 @@ function DCArtboard({ label, children, width, height, style = {} }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// Post-it — absolute-positioned sticky note
-// ─────────────────────────────────────────────────────────────
 function DCPostIt({ children, top, left, right, bottom, rotate = -2, width = 180 }) {
   return (
     <div style={{
@@ -249,6 +222,53 @@ function DCPostIt({ children, top, left, right, bottom, rotate = -2, width = 180
   );
 }
 
-Object.assign(window, { DesignCanvas, DCSection, DCArtboard, DCPostIt });
+// ── Demo content ──────────────────────────────────────────────────────────
+function App() {
+  return (
+    <DesignCanvas>
+      <DCSection
+        title="My project"
+        subtitle="Pan with two fingers or drag the background · Zoom with pinch or scroll"
+      >
+        <DCArtboard label="Artboard 1" width={320} height={200}>
+          <div style={{ padding: 24, fontFamily: DC.font }}>
+            <div style={{ fontSize: 16, fontWeight: 600, color: DC.title, marginBottom: 8 }}>Hello!</div>
+            <div style={{ fontSize: 14, color: DC.subtitle, lineHeight: 1.5 }}>
+              Replace this content with your own artboards. Pan, zoom, and explore.
+            </div>
+          </div>
+        </DCArtboard>
 
- 
+        <DCArtboard label="Artboard 2" width={320} height={200} style={{ background: '#f5f0ff' }}>
+          <div style={{ padding: 24, fontFamily: DC.font }}>
+            <div style={{ fontSize: 16, fontWeight: 600, color: '#44122C', marginBottom: 8 }}>Another artboard</div>
+            <div style={{ fontSize: 14, color: DC.subtitle, lineHeight: 1.5 }}>
+              Add as many sections and artboards as you need.
+            </div>
+          </div>
+          <DCPostIt top={20} right={-20} rotate={3}>
+            Add your notes here!
+          </DCPostIt>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection title="Section 2" subtitle="Add more sections to organise your work" gap={40}>
+        <DCArtboard label="Component" width={200} height={120}>
+          <div style={{ padding: 20, fontFamily: DC.font, fontSize: 13, color: DC.subtitle }}>
+            Components, specs, whatever you need.
+          </div>
+        </DCArtboard>
+        <DCArtboard label="Notes" width={200} height={120} style={{ background: '#fff9f5' }}>
+          <div style={{ padding: 20, fontFamily: DC.font, fontSize: 13, color: DC.subtitle }}>
+            Use artboard style prop for custom backgrounds.
+          </div>
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
